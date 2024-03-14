@@ -88,67 +88,25 @@ The relationship between the word count and the frequency of the letter 'n' was 
 library(boot)
 library(collapse)
 library(dataverse)
-library(gutenbergr)
 library(janitor)
 library(knitr)
 library(marginaleffects)
 library(modelsummary)
-library(rstanarm)
-#library(tidybayes)
-library(tidyverse)
-```
-
-```{r}
-gutenberg_id_of_bluegoose <- 31485
-
-blue_goose <-
-  gutenberg_download(
-    gutenberg_id = gutenberg_id_of_bluegoose,
-    mirror = "https://gutenberg.pglaf.org/"
-  )
-
-
-write_csv(blue_goose, "blue_goose.csv")
-```
-
-```{r}
-blue_goose <- read_csv(
-  "blue_goose.csv",
-  col_types = cols(
-    gutenberg_id = col_integer(),
-    text = col_character()
-  )
-)
-
 
 ```
 
 ```{r}
-blue_goose_reduced <-
-  blue_goose |>
-  filter(!is.na(text)) |> # Remove empty lines
-  mutate(chapter = if_else(str_detect(text, "CHAPTER") == TRUE,
-                           text,
-                           NA_character_)) |> # Find start of chapter
-  fill(chapter, .direction = "down") |> 
-  mutate(chapter_line = row_number(), 
-         .by = chapter) |> # Add line number to each chapter
-  filter(!is.na(chapter), 
-         chapter_line %in% c(2:30)) |> # Remove "CHAPTER I" etc
-  select(text, chapter) |>
-  mutate(
-    chapter = str_remove(chapter, "CHAPTER "),
-    chapter = str_remove(chapter, "—CONCLUSION"),
-    chapter = as.integer(as.roman(chapter))
-  ) |> # Change chapters to integers
-  mutate(count_n = str_count(text, "n|N"),
-         word_count = str_count(text, "\\w+")
-         # From: https://stackoverflow.com/a/38058033
-         ) 
+source("scripts/data_acquisition.R")
+source("scripts/preprocess_data.R")
+source("scripts/statistical_modeling.R")
+```
 
-#blue_goose_reduced |>
-#  select(chapter, word_count, count_n, text) |>
-#  head()
+```{r}
+# Download and save "Blue Goose"
+download_blue_goose()
+
+# Preprocess the downloaded "Blue Goose" data
+blue_goose_reduced <- preprocess_blue_goose("blue_goose.csv")
 
 ```
 
@@ -204,21 +162,11 @@ The model diagnostics, including the number of observations (Num.Obs.) at 783 an
 Figure 3 visualizes the predicted number of 'n/N's based on the number of words, offering a graphical representation of the GLM's findings. This plot underscores the positive relationship uncovered by the statistical model, with the predicted counts of 'n/N's increasing in line with word count. This visualization not only corroborates the numerical findings from the GLM but also provides an intuitive understanding of the relationship between text length and letter frequency.
 
 ```{r}
-bluegoose_n_counts <-
-  stan_glm(
-    count_n ~ word_count,
-    data = blue_goose_reduced,
-    family = poisson(link = "log"),
-    prior = normal(location = 0, scale = 2.5, autoscale = TRUE),
-    prior_intercept = normal(location = 0, scale = 2.5, autoscale = TRUE),
-    seed = 853,
-    refresh = 0
-  )
+# Fit the GLM model to the preprocessed data
+model <- fit_glm_poisson(blue_goose_reduced)
 
-saveRDS(
-  bluegoose_n_counts,
-  file = "bluegoose_n_counts.rds"
-)
+# Visualize the model's predictions
+visualize_predictions(model)
 ```
 
 ```{r}
@@ -226,20 +174,9 @@ saveRDS(
 #| tbl-cap: "Summary statistics of dataset"
 modelsummary(
   list(
-    "Number of n/Ns" = bluegoose_n_counts
+    "Number of n/Ns" = model
   )
 )
-```
-
-```{r}
-#| label: fig-predic
-#| layout-ncol: 1
-#| fig-cap: "The predicted number of n/Ns in each line based on the number of words"
-
-plot_predictions(bluegoose_n_counts, condition = "word_count") +
-  labs(x = "Number of words",
-       y = "Average number of n/Ns in the first 10 lines") +
-  theme_classic()
 ```
 
 # **Discussion**
