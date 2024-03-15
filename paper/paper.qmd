@@ -7,6 +7,7 @@ execute:
 title-block-banner: true
 author:  
    - Junwei Chen
+   - Epring Gong
 date: today
 date-format: long
 format: 
